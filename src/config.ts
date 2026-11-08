@@ -12,4 +12,8 @@ export const config = {
     baseUrl: process.env.UPSTREAM_BASE_URL ?? 'http://localhost:3001',
     timeoutMs: readNumber('UPSTREAM_TIMEOUT_MS', 2000),
   },
+  cache: {
+    ttlMs: readNumber('CACHE_TTL_MS', 60_000),
+    maxEntries: readNumber('CACHE_MAX_ENTRIES', 10_000),
+  },
 } as const;
