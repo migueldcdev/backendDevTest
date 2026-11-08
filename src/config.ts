@@ -8,4 +8,8 @@ function readNumber(name: string, fallback: number): number {
 
 export const config = {
   port: readNumber('PORT', 5000),
+  upstream: {
+    baseUrl: process.env.UPSTREAM_BASE_URL ?? 'http://localhost:3001',
+    timeoutMs: readNumber('UPSTREAM_TIMEOUT_MS', 2000),
+  },
 } as const;
