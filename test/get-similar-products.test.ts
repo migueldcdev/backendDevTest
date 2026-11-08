@@ -65,4 +65,16 @@ describe('GetSimilarProducts', () => {
 
     await expect(new GetSimilarProducts(catalog).execute('1')).rejects.toThrow(UpstreamUnavailableError);
   });
+
+  it('propagates unexpected errors instead of omitting the product', async () => {
+    const bug = new TypeError('bug');
+    const catalog = {
+      getSimilarIds: async () => ['2'],
+      getProduct: async () => {
+        throw bug;
+      },
+    };
+
+    await expect(new GetSimilarProducts(catalog).execute('1')).rejects.toBe(bug);
+  });
 });
