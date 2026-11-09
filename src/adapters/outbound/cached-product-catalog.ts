@@ -7,13 +7,9 @@ export interface CacheSettings {
   readonly maxEntries: number;
 }
 
-interface CacheEntry<T> {
-  readonly value: T;
-}
-
 export class CachedProductCatalog implements ProductCatalog {
-  private readonly similarIds: LRUCache<string, CacheEntry<string[]>>;
-  private readonly products: LRUCache<string, CacheEntry<ProductDetail | null>>;
+  private readonly similarIds: LRUCache<string, Promise<string[]>>;
+  private readonly products: LRUCache<string, Promise<ProductDetail | null>>;
 
   constructor(
     private readonly inner: ProductCatalog,
@@ -33,14 +29,17 @@ export class CachedProductCatalog implements ProductCatalog {
   }
 }
 
-async function readThrough<T>(
-  cache: LRUCache<string, CacheEntry<T>>,
+function readThrough<T>(
+  cache: LRUCache<string, Promise<T>>,
   key: string,
   load: () => Promise<T>,
 ): Promise<T> {
   const cached = cache.get(key);
-  if (cached) return cached.value;
-  const value = await load();
-  cache.set(key, { value });
-  return value;
+  if (cached) return cached;
+  const pending = load();
+  cache.set(key, pending);
+  pending.catch(() => {
+    if (cache.peek(key) === pending) cache.delete(key);
+  });
+  return pending;
 }

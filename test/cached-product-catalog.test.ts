@@ -64,6 +64,29 @@ describe('CachedProductCatalog', () => {
     expect(getProduct).toHaveBeenCalledTimes(2);
   });
 
+  it('shares one upstream call between concurrent requests for the same product', async () => {
+    const inner = new FakeProductCatalog({ products: [productWithId('2')], delaysMs: { '2': 20 } });
+    const getProduct = vi.spyOn(inner, 'getProduct');
+    const catalog = cachedCatalogOver(inner);
+
+    const results = await Promise.all([1, 2, 3].map(() => catalog.getProduct('2')));
+
+    expect(results).toEqual([1, 2, 3].map(() => productWithId('2')));
+    expect(getProduct).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries after a shared concurrent call fails', async () => {
+    const inner = new FakeProductCatalog({ unavailableIds: ['6'], delaysMs: { '6': 20 } });
+    const getProduct = vi.spyOn(inner, 'getProduct');
+    const catalog = cachedCatalogOver(inner);
+
+    const results = await Promise.allSettled([1, 2].map(() => catalog.getProduct('6')));
+    await catalog.getProduct('6').catch(() => null);
+
+    expect(results.map((result) => result.status)).toEqual(['rejected', 'rejected']);
+    expect(getProduct).toHaveBeenCalledTimes(2);
+  });
+
   it('evicts the least recently used product when full', async () => {
     const inner = new FakeProductCatalog({ products: ['2', '3', '4'].map(productWithId) });
     const getProduct = vi.spyOn(inner, 'getProduct');
