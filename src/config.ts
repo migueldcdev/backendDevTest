@@ -15,5 +15,6 @@ export const config = {
   cache: {
     ttlMs: readNumber('CACHE_TTL_MS', 60_000),
     maxEntries: readNumber('CACHE_MAX_ENTRIES', 10_000),
+    failureTtlMs: readNumber('CACHE_FAILURE_TTL_MS', 5_000),
   },
 } as const;

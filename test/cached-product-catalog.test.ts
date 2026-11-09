@@ -4,8 +4,10 @@ import { CachedProductCatalog } from '../src/adapters/outbound/cached-product-ca
 import { UpstreamUnavailableError } from '../src/domain/errors.ts';
 import { FakeProductCatalog, productWithId } from './fake-product-catalog.ts';
 
-const cachedCatalogOver = (inner: FakeProductCatalog, { ttlMs = 60_000, maxEntries = 10 } = {}) =>
-  new CachedProductCatalog(inner, { ttlMs, maxEntries });
+const cachedCatalogOver = (
+  inner: FakeProductCatalog,
+  { ttlMs = 60_000, maxEntries = 10, failureTtlMs = 5_000 } = {},
+) => new CachedProductCatalog(inner, { ttlMs, maxEntries, failureTtlMs });
 
 describe('CachedProductCatalog', () => {
   it('serves a repeated product from cache', async () => {
@@ -53,13 +55,25 @@ describe('CachedProductCatalog', () => {
     expect(getProduct).toHaveBeenCalledTimes(1);
   });
 
-  it('does not cache failures', async () => {
+  it('remembers a failure for the failure ttl', async () => {
     const inner = new FakeProductCatalog({ unavailableIds: ['6'] });
     const getProduct = vi.spyOn(inner, 'getProduct');
     const catalog = cachedCatalogOver(inner);
 
     await expect(catalog.getProduct('6')).rejects.toThrow(UpstreamUnavailableError);
     await expect(catalog.getProduct('6')).rejects.toThrow(UpstreamUnavailableError);
+
+    expect(getProduct).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries a failure once the failure ttl expires', async () => {
+    const inner = new FakeProductCatalog({ unavailableIds: ['6'] });
+    const getProduct = vi.spyOn(inner, 'getProduct');
+    const catalog = cachedCatalogOver(inner, { failureTtlMs: 20 });
+
+    await catalog.getProduct('6').catch(() => null);
+    await sleep(40);
+    await catalog.getProduct('6').catch(() => null);
 
     expect(getProduct).toHaveBeenCalledTimes(2);
   });
@@ -73,18 +87,6 @@ describe('CachedProductCatalog', () => {
 
     expect(results).toEqual([1, 2, 3].map(() => productWithId('2')));
     expect(getProduct).toHaveBeenCalledTimes(1);
-  });
-
-  it('retries after a shared concurrent call fails', async () => {
-    const inner = new FakeProductCatalog({ unavailableIds: ['6'], delaysMs: { '6': 20 } });
-    const getProduct = vi.spyOn(inner, 'getProduct');
-    const catalog = cachedCatalogOver(inner);
-
-    const results = await Promise.allSettled([1, 2].map(() => catalog.getProduct('6')));
-    await catalog.getProduct('6').catch(() => null);
-
-    expect(results.map((result) => result.status)).toEqual(['rejected', 'rejected']);
-    expect(getProduct).toHaveBeenCalledTimes(2);
   });
 
   it('evicts the least recently used product when full', async () => {
