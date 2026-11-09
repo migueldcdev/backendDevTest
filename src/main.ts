@@ -7,3 +7,7 @@ import { config } from './config.ts';
 const catalog = new CachedProductCatalog(new HttpProductCatalog(config.upstream), config.cache);
 const server = buildServer(new GetSimilarProducts(catalog), { logger: true });
 await server.listen({ port: config.port, host: '0.0.0.0' });
+
+for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+  process.once(signal, () => void server.close());
+}
